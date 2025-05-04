@@ -1,68 +1,29 @@
-
+use cgmath::Vector3;
+use cgmath::prelude::*;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::mem::size_of;
-use cgmath::prelude::*;
-use cgmath::Vector3;
 
 use hal::{
-    Backend,
-    Device,
-    PhysicalDevice,
-    Surface,
-    SwapchainConfig,
-    Swapchain,
-    Adapter,
-    CommandPool,
-    pass::{
-        self,
-    },
-    image::{
-        self,
-    },
-    format::{
-        self,
-        ChannelType,
-        Swizzle,
-    },
-    pso::{
-        self,
-        PipelineStage,
-        EntryPoint,
-        GraphicsShaderSet,
-        Rasterizer,
-    },
-    window::{
-        Extent2D,
-    },
-    pool::{
-        self,
-    },
-    command::{
-        self,
-        CommandBuffer,
-    },
-    queue::{
-        self,
-        Submission,
-        family::QueueGroup,
-    },
-    buffer::{
-        self,
-    },
-    memory::{
-        self,
-    },
-    adapter::{
-        self,
-    },
+    Adapter, Backend, CommandPool, Device, PhysicalDevice, Surface, Swapchain, SwapchainConfig,
+    adapter::{self},
+    buffer::{self},
+    command::{self, CommandBuffer},
+    format::{self, ChannelType, Swizzle},
+    image::{self},
+    memory::{self},
+    pass::{self},
+    pool::{self},
+    pso::{self, EntryPoint, GraphicsShaderSet, PipelineStage, Rasterizer},
+    queue::{self, Submission, family::QueueGroup},
+    window::Extent2D,
 };
 
-use crate::error;
-use super::atlas;
-use crate::bsp;
 use super::alloc;
+use super::atlas;
 use super::{BufferBundle, ImageBundle};
+use crate::bsp;
+use crate::error;
 
 pub struct QMap<B: Backend> {
     buffer: BufferBundle<B>,
@@ -78,8 +39,9 @@ pub struct QMap<B: Backend> {
     time_offset: f32,
 }
 
-impl <B> QMap<B>
-    where B: Backend,
+impl<B> QMap<B>
+where
+    B: Backend,
 {
     pub fn new(
         b: bsp::BspFile,
@@ -88,27 +50,25 @@ impl <B> QMap<B>
         queue: &mut queue::CommandQueue<B, hal::Graphics>,
         command_pool: &mut CommandPool<B, hal::Graphics>,
         allocator: &mut alloc::GPUAlloc<B, impl alloc::RangeAlloc>,
-    ) -> error::Result<QMap<B>>
-    {
+    ) -> error::Result<QMap<B>> {
+        use std::cmp::{max, min};
         use std::f32;
-        use std::cmp::{min, max};
-        let mut atlas = atlas::TextureAtlas::new(
-            super::ATLAS_SIZE as i32,
-            super::ATLAS_SIZE as i32
-        );
-        let mut light_atlas = atlas::TextureAtlas::new_padded(
-            super::ATLAS_SIZE as i32,
-            super::ATLAS_SIZE as i32,
-            1
-        );
+        let mut atlas =
+            atlas::TextureAtlas::new(super::ATLAS_SIZE as i32, super::ATLAS_SIZE as i32);
+        let mut light_atlas =
+            atlas::TextureAtlas::new_padded(super::ATLAS_SIZE as i32, super::ATLAS_SIZE as i32, 1);
 
         let mut textures = vec![atlas::Rect::default(); b.textures.len()];
-        let mut texture_data = (0..3).map(|v| {
-            let size = super::ATLAS_SIZE as usize >> v;
-            vec![0u8; size * size]
-        }).collect::<Vec<_>>();
+        let mut texture_data = (0..3)
+            .map(|v| {
+                let size = super::ATLAS_SIZE as usize >> v;
+                vec![0u8; size * size]
+            })
+            .collect::<Vec<_>>();
 
-        let mut t_list = b.textures.iter()
+        let mut t_list = b
+            .textures
+            .iter()
             .filter(|v| v.id != -1)
             .map(|v| TSortable {
                 idx: v.id,
@@ -125,11 +85,12 @@ impl <B> QMap<B>
 
             for (mip, pic) in tex.pictures.iter().enumerate().take(3) {
                 let target = &mut texture_data[mip];
-                for y in 0 .. pic.height {
-                    for x in 0 .. pic.width {
-                        let idx = (rect.x as usize >> mip) + x as usize
+                for y in 0..pic.height {
+                    for x in 0..pic.width {
+                        let idx = (rect.x as usize >> mip)
+                            + x as usize
                             + ((rect.y as usize >> mip) + y as usize)
-                            * (super::ATLAS_SIZE as usize >> mip);
+                                * (super::ATLAS_SIZE as usize >> mip);
                         let sidx = x as usize + y as usize * pic.width as usize;
                         target[idx] = pic.data[sidx];
                     }
@@ -190,14 +151,14 @@ impl <B> QMap<B>
         let mut light_map_data = vec![0; (super::ATLAS_SIZE * super::ATLAS_SIZE) as usize];
 
         lights.sort();
-        let lights = lights.into_iter()
+        let lights = lights
+            .into_iter()
             .map(|v| {
                 let rect = light_atlas.find(v.width as i32, v.height as i32).unwrap();
-                for y in -1.. v.height as i32 + 1 {
-                    for x in -1 .. v.width as i32 + 1 {
+                for y in -1..v.height as i32 + 1 {
+                    for x in -1..v.width as i32 + 1 {
                         let idx = (rect.x + x) as usize
-                            + (rect.y  + y) as usize
-                            * (super::ATLAS_SIZE as usize);
+                            + (rect.y + y) as usize * (super::ATLAS_SIZE as usize);
                         let y = max(min(y, v.height as i32 - 1), 0);
                         let x = max(min(x, v.width as i32 - 1), 0);
                         let sidx = x as usize + y as usize * v.width as usize;
@@ -254,7 +215,9 @@ impl <B> QMap<B>
 
                 let light = if base_light == 255 {
                     0
-                } else { face.base_light };
+                } else {
+                    face.base_light
+                };
 
                 let mut t_offset_x = 0.0;
                 let mut t_offset_y = 0.0;
@@ -294,11 +257,7 @@ impl <B> QMap<B>
 
                 for ledge in &b.ledges[face.ledges.clone()] {
                     let e = &b.edges[(*ledge).abs() as usize];
-                    let (av, bv) = if *ledge >= 0 {
-                        (e.1, e.0)
-                    } else {
-                        (e.0, e.1)
-                    };
+                    let (av, bv) = if *ledge >= 0 { (e.1, e.0) } else { (e.0, e.1) };
 
                     if is_sky {
                         for v in &[av, bv] {
@@ -316,8 +275,8 @@ impl <B> QMap<B>
 
                     let (a_tx, a_ty) = if face.light_map != -1 {
                         (
-                            (a_s/16.0).floor() - light_s,
-                            (a_t/16.0).floor() - light_t
+                            (a_s / 16.0).floor() - light_s,
+                            (a_t / 16.0).floor() - light_t,
                         )
                     } else {
                         (-1.0, -1.0)
@@ -330,16 +289,8 @@ impl <B> QMap<B>
                             model.origin.z + av.z,
                         ],
                         tex: [trect.x as u16, trect.y as u16],
-                        tex_info: [
-                            a_s as i16,
-                            a_t as i16,
-                            tex.width as i16,
-                            tex.height as i16,
-                        ],
-                        light_info: [
-                            (t_offset_x + a_tx) as i16,
-                            (t_offset_y + a_ty) as i16,
-                        ],
+                        tex_info: [a_s as i16, a_t as i16, tex.width as i16, tex.height as i16],
+                        light_info: [(t_offset_x + a_tx) as i16, (t_offset_y + a_ty) as i16],
                         light: light,
                         light_type: type_light,
                     });
@@ -349,8 +300,8 @@ impl <B> QMap<B>
 
                     let (b_tx, b_ty) = if face.light_map != -1 {
                         (
-                            (b_s/16.0).floor() - light_s,
-                            (b_t/16.0).floor() - light_t
+                            (b_s / 16.0).floor() - light_s,
+                            (b_t / 16.0).floor() - light_t,
                         )
                     } else {
                         (-1.0, -1.0)
@@ -363,33 +314,21 @@ impl <B> QMap<B>
                             model.origin.z + bv.z,
                         ],
                         tex: [trect.x as u16, trect.y as u16],
-                        tex_info: [
-                            b_s as i16,
-                            b_t as i16,
-                            tex.width as i16,
-                            tex.height as i16,
-                        ],
-                        light_info: [
-                            (t_offset_x + b_tx) as i16,
-                            (t_offset_y + b_ty) as i16,
-                        ],
+                        tex_info: [b_s as i16, b_t as i16, tex.width as i16, tex.height as i16],
+                        light_info: [(t_offset_x + b_tx) as i16, (t_offset_y + b_ty) as i16],
                         light: light,
                         light_type: type_light,
                     });
 
-                    let center = Vector3::new(
-                        center_x,
-                        center_y,
-                        center_z
-                    );
+                    let center = Vector3::new(center_x, center_y, center_z);
 
                     let c_s = center.dot(s) + tex_info.dist_s;
                     let c_t = center.dot(t) + tex_info.dist_t;
 
                     let (c_tx, c_ty) = if face.light_map != -1 {
                         (
-                            (c_s/16.0).floor() - light_s,
-                            (c_t/16.0).floor() - light_t
+                            (c_s / 16.0).floor() - light_s,
+                            (c_t / 16.0).floor() - light_t,
                         )
                     } else {
                         (-1.0, -1.0)
@@ -402,16 +341,8 @@ impl <B> QMap<B>
                             model.origin.z + center.z,
                         ],
                         tex: [trect.x as u16, trect.y as u16],
-                        tex_info: [
-                            c_s as i16,
-                            c_t as i16,
-                            tex.width as i16,
-                            tex.height as i16,
-                        ],
-                        light_info: [
-                            (t_offset_x + c_tx) as i16,
-                            (t_offset_y + c_ty) as i16,
-                        ],
+                        tex_info: [c_s as i16, c_t as i16, tex.width as i16, tex.height as i16],
+                        light_info: [(t_offset_x + c_tx) as i16, (t_offset_y + c_ty) as i16],
                         light: light,
                         light_type: type_light,
                     });
@@ -425,11 +356,16 @@ impl <B> QMap<B>
                 allocator,
                 (size_of::<super::Vertex>() * verts.len()) as u64,
                 buffer::Usage::TRANSFER_SRC,
-                memory::Properties::CPU_VISIBLE
+                memory::Properties::CPU_VISIBLE,
             );
 
             {
-                let mut data_target = device.acquire_mapping_writer(staging_buffer.memory.memory(), staging_buffer.memory.range.clone()).unwrap();
+                let mut data_target = device
+                    .acquire_mapping_writer(
+                        staging_buffer.memory.memory(),
+                        staging_buffer.memory.range.clone(),
+                    )
+                    .unwrap();
                 data_target[..verts.len()].copy_from_slice(&verts);
                 device.release_mapping_writer(data_target).unwrap();
             }
@@ -439,17 +375,21 @@ impl <B> QMap<B>
                 allocator,
                 (size_of::<super::Vertex>() * verts.len()) as u64,
                 buffer::Usage::VERTEX | buffer::Usage::TRANSFER_DST,
-                memory::Properties::DEVICE_LOCAL
+                memory::Properties::DEVICE_LOCAL,
             );
 
             // Copy from staging to real buffer
             let mut cmd = command_pool.acquire_command_buffer::<command::OneShot>();
             cmd.begin();
-            cmd.copy_buffer(&staging_buffer.buffer, &buffer.buffer, Some(command::BufferCopy {
-                src: 0,
-                dst: 0,
-                size: (size_of::<super::Vertex>() * verts.len()) as u64,
-            }));
+            cmd.copy_buffer(
+                &staging_buffer.buffer,
+                &buffer.buffer,
+                Some(command::BufferCopy {
+                    src: 0,
+                    dst: 0,
+                    size: (size_of::<super::Vertex>() * verts.len()) as u64,
+                }),
+            );
             cmd.finish();
 
             queue.submit_nosemaphores(Some(&cmd), None);
@@ -467,11 +407,16 @@ impl <B> QMap<B>
                 allocator,
                 (size_of::<super::Vertex>() * verts_sky.len()) as u64,
                 buffer::Usage::TRANSFER_SRC,
-                memory::Properties::CPU_VISIBLE
+                memory::Properties::CPU_VISIBLE,
             );
 
             {
-                let mut data_target = device.acquire_mapping_writer(staging_buffer.memory.memory(), staging_buffer.memory.range.clone()).unwrap();
+                let mut data_target = device
+                    .acquire_mapping_writer(
+                        staging_buffer.memory.memory(),
+                        staging_buffer.memory.range.clone(),
+                    )
+                    .unwrap();
                 data_target[..verts_sky.len()].copy_from_slice(&verts_sky);
                 device.release_mapping_writer(data_target).unwrap();
             }
@@ -481,17 +426,21 @@ impl <B> QMap<B>
                 allocator,
                 (size_of::<super::Vertex>() * verts_sky.len()) as u64,
                 buffer::Usage::VERTEX | buffer::Usage::TRANSFER_DST,
-                memory::Properties::DEVICE_LOCAL
+                memory::Properties::DEVICE_LOCAL,
             );
 
             // Copy from staging to real buffer
             let mut cmd = command_pool.acquire_command_buffer::<command::OneShot>();
             cmd.begin();
-            cmd.copy_buffer(&staging_buffer.buffer, &buffer.buffer, Some(command::BufferCopy {
-                src: 0,
-                dst: 0,
-                size: (size_of::<super::Vertex>() * verts_sky.len()) as u64,
-            }));
+            cmd.copy_buffer(
+                &staging_buffer.buffer,
+                &buffer.buffer,
+                Some(command::BufferCopy {
+                    src: 0,
+                    dst: 0,
+                    size: (size_of::<super::Vertex>() * verts_sky.len()) as u64,
+                }),
+            );
             cmd.finish();
 
             queue.submit_nosemaphores(Some(&cmd), None);
@@ -503,21 +452,30 @@ impl <B> QMap<B>
             buffer
         };
 
-
-        let sky_box_verts = sky_texture.map_or_else(Vec::new, |v| Self::gen_sky_box(
-            &textures, v, sky_min + Vector3::new(-2000.0, -2000.0, 0.0), sky_max + Vector3::new(2000.0, 2000.0, 0.0),
-        ));
+        let sky_box_verts = sky_texture.map_or_else(Vec::new, |v| {
+            Self::gen_sky_box(
+                &textures,
+                v,
+                sky_min + Vector3::new(-2000.0, -2000.0, 0.0),
+                sky_max + Vector3::new(2000.0, 2000.0, 0.0),
+            )
+        });
         let buffer_sky_box = unsafe {
             let staging_buffer = BufferBundle::new(
                 device,
                 allocator,
                 (size_of::<super::Vertex>() * sky_box_verts.len()) as u64,
                 buffer::Usage::TRANSFER_SRC,
-                memory::Properties::CPU_VISIBLE
+                memory::Properties::CPU_VISIBLE,
             );
 
             {
-                let mut data_target = device.acquire_mapping_writer(staging_buffer.memory.memory(), staging_buffer.memory.range.clone()).unwrap();
+                let mut data_target = device
+                    .acquire_mapping_writer(
+                        staging_buffer.memory.memory(),
+                        staging_buffer.memory.range.clone(),
+                    )
+                    .unwrap();
                 data_target[..sky_box_verts.len()].copy_from_slice(&sky_box_verts);
                 device.release_mapping_writer(data_target).unwrap();
             }
@@ -527,17 +485,21 @@ impl <B> QMap<B>
                 allocator,
                 (size_of::<super::Vertex>() * sky_box_verts.len()) as u64,
                 buffer::Usage::VERTEX | buffer::Usage::TRANSFER_DST,
-                memory::Properties::DEVICE_LOCAL
+                memory::Properties::DEVICE_LOCAL,
             );
 
             // Copy from staging to real buffer
             let mut cmd = command_pool.acquire_command_buffer::<command::OneShot>();
             cmd.begin();
-            cmd.copy_buffer(&staging_buffer.buffer, &buffer.buffer, Some(command::BufferCopy {
-                src: 0,
-                dst: 0,
-                size: (size_of::<super::Vertex>() * sky_box_verts.len()) as u64,
-            }));
+            cmd.copy_buffer(
+                &staging_buffer.buffer,
+                &buffer.buffer,
+                Some(command::BufferCopy {
+                    src: 0,
+                    dst: 0,
+                    size: (size_of::<super::Vertex>() * sky_box_verts.len()) as u64,
+                }),
+            );
             cmd.finish();
 
             queue.submit_nosemaphores(Some(&cmd), None);
@@ -551,14 +513,22 @@ impl <B> QMap<B>
 
         let (texture, texture_light) = unsafe {
             let texture_light = ImageBundle::new(
-                device, allocator, super::ATLAS_SIZE, super::ATLAS_SIZE, 1,
+                device,
+                allocator,
+                super::ATLAS_SIZE,
+                super::ATLAS_SIZE,
+                1,
                 format::Format::R8Unorm,
-                hal::image::Filter::Linear
+                hal::image::Filter::Linear,
             );
             let texture = ImageBundle::new(
-                device, allocator, super::ATLAS_SIZE, super::ATLAS_SIZE, 1,
+                device,
+                allocator,
+                super::ATLAS_SIZE,
+                super::ATLAS_SIZE,
+                1,
                 format::Format::R8Unorm,
-                hal::image::Filter::Nearest
+                hal::image::Filter::Nearest,
             );
 
             let staging_buffer_l = BufferBundle::new(
@@ -566,33 +536,45 @@ impl <B> QMap<B>
                 allocator,
                 (texture_light.row_pitch * super::ATLAS_SIZE) as u64,
                 buffer::Usage::TRANSFER_SRC,
-                memory::Properties::CPU_VISIBLE
+                memory::Properties::CPU_VISIBLE,
             );
             let staging_buffer = BufferBundle::new(
                 device,
                 allocator,
                 (texture.row_pitch * super::ATLAS_SIZE) as u64,
                 buffer::Usage::TRANSFER_SRC,
-                memory::Properties::CPU_VISIBLE
+                memory::Properties::CPU_VISIBLE,
             );
 
             {
-                let mut data_target = device.acquire_mapping_writer(staging_buffer_l.memory.memory(), staging_buffer_l.memory.range.clone()).unwrap();
-                for y in 0 .. super::ATLAS_SIZE {
+                let mut data_target = device
+                    .acquire_mapping_writer(
+                        staging_buffer_l.memory.memory(),
+                        staging_buffer_l.memory.range.clone(),
+                    )
+                    .unwrap();
+                for y in 0..super::ATLAS_SIZE {
                     let idx = y * super::ATLAS_SIZE;
-                    let data = &light_map_data[idx as usize .. (idx + super::ATLAS_SIZE) as usize];
+                    let data = &light_map_data[idx as usize..(idx + super::ATLAS_SIZE) as usize];
                     let d_idx = y * texture_light.row_pitch;
-                    data_target[d_idx as usize..(d_idx + super::ATLAS_SIZE) as usize].copy_from_slice(&data);
+                    data_target[d_idx as usize..(d_idx + super::ATLAS_SIZE) as usize]
+                        .copy_from_slice(&data);
                 }
                 device.release_mapping_writer(data_target).unwrap();
             }
             {
-                let mut data_target = device.acquire_mapping_writer(staging_buffer.memory.memory(), staging_buffer.memory.range.clone()).unwrap();
-                for y in 0 .. super::ATLAS_SIZE {
+                let mut data_target = device
+                    .acquire_mapping_writer(
+                        staging_buffer.memory.memory(),
+                        staging_buffer.memory.range.clone(),
+                    )
+                    .unwrap();
+                for y in 0..super::ATLAS_SIZE {
                     let idx = y * super::ATLAS_SIZE;
-                    let data = &texture_data[0][idx as usize .. (idx + super::ATLAS_SIZE) as usize];
+                    let data = &texture_data[0][idx as usize..(idx + super::ATLAS_SIZE) as usize];
                     let d_idx = y * texture_light.row_pitch;
-                    data_target[d_idx as usize..(d_idx + super::ATLAS_SIZE) as usize].copy_from_slice(&data);
+                    data_target[d_idx as usize..(d_idx + super::ATLAS_SIZE) as usize]
+                        .copy_from_slice(&data);
                 }
                 device.release_mapping_writer(data_target).unwrap();
             }
@@ -601,12 +583,15 @@ impl <B> QMap<B>
             let mut cmd = command_pool.acquire_command_buffer::<command::OneShot>();
             cmd.begin();
             cmd.pipeline_barrier(
-                pso::PipelineStage::TOP_OF_PIPE .. pso::PipelineStage::TRANSFER,
+                pso::PipelineStage::TOP_OF_PIPE..pso::PipelineStage::TRANSFER,
                 memory::Dependencies::empty(),
                 &[
                     memory::Barrier::Image {
                         states: (image::Access::empty(), image::Layout::Undefined)
-                            .. (image::Access::TRANSFER_WRITE, image::Layout::TransferDstOptimal),
+                            ..(
+                                image::Access::TRANSFER_WRITE,
+                                image::Layout::TransferDstOptimal,
+                            ),
                         target: &*texture_light.image,
                         families: None,
                         range: image::SubresourceRange {
@@ -617,7 +602,10 @@ impl <B> QMap<B>
                     },
                     memory::Barrier::Image {
                         states: (image::Access::empty(), image::Layout::Undefined)
-                            .. (image::Access::TRANSFER_WRITE, image::Layout::TransferDstOptimal),
+                            ..(
+                                image::Access::TRANSFER_WRITE,
+                                image::Layout::TransferDstOptimal,
+                            ),
                         target: &*texture.image,
                         families: None,
                         range: image::SubresourceRange {
@@ -626,7 +614,7 @@ impl <B> QMap<B>
                             layers: 0..1,
                         },
                     },
-                ]
+                ],
             );
             cmd.copy_buffer_to_image(
                 &staging_buffer_l.buffer,
@@ -641,7 +629,7 @@ impl <B> QMap<B>
                         level: 0,
                         layers: 0..1,
                     },
-                    image_offset: image::Offset { x: 0, y: 0, z: 0},
+                    image_offset: image::Offset { x: 0, y: 0, z: 0 },
                     image_extent: image::Extent {
                         width: super::ATLAS_SIZE,
                         height: super::ATLAS_SIZE,
@@ -662,7 +650,7 @@ impl <B> QMap<B>
                         level: 0,
                         layers: 0..1,
                     },
-                    image_offset: image::Offset { x: 0, y: 0, z: 0},
+                    image_offset: image::Offset { x: 0, y: 0, z: 0 },
                     image_extent: image::Extent {
                         width: super::ATLAS_SIZE,
                         height: super::ATLAS_SIZE,
@@ -671,12 +659,18 @@ impl <B> QMap<B>
                 }],
             );
             cmd.pipeline_barrier(
-                pso::PipelineStage::TRANSFER .. pso::PipelineStage::FRAGMENT_SHADER,
+                pso::PipelineStage::TRANSFER..pso::PipelineStage::FRAGMENT_SHADER,
                 memory::Dependencies::empty(),
                 &[
                     memory::Barrier::Image {
-                        states: (image::Access::TRANSFER_WRITE, image::Layout::TransferDstOptimal)
-                            .. (image::Access::SHADER_READ, image::Layout::ShaderReadOnlyOptimal),
+                        states: (
+                            image::Access::TRANSFER_WRITE,
+                            image::Layout::TransferDstOptimal,
+                        )
+                            ..(
+                                image::Access::SHADER_READ,
+                                image::Layout::ShaderReadOnlyOptimal,
+                            ),
                         target: &*texture_light.image,
                         families: None,
                         range: image::SubresourceRange {
@@ -686,8 +680,14 @@ impl <B> QMap<B>
                         },
                     },
                     memory::Barrier::Image {
-                        states: (image::Access::TRANSFER_WRITE, image::Layout::TransferDstOptimal)
-                            .. (image::Access::SHADER_READ, image::Layout::ShaderReadOnlyOptimal),
+                        states: (
+                            image::Access::TRANSFER_WRITE,
+                            image::Layout::TransferDstOptimal,
+                        )
+                            ..(
+                                image::Access::SHADER_READ,
+                                image::Layout::ShaderReadOnlyOptimal,
+                            ),
                         target: &*texture.image,
                         families: None,
                         range: image::SubresourceRange {
@@ -696,7 +696,7 @@ impl <B> QMap<B>
                             layers: 0..1,
                         },
                     },
-                ]
+                ],
             );
             cmd.finish();
 
@@ -733,12 +733,16 @@ impl <B> QMap<B>
         depth_pipeline: &B::GraphicsPipeline,
         sky_pipeline: &B::GraphicsPipeline,
         encoder: &mut command::RenderPassInlineEncoder<B>,
-    ) -> error::Result<()>
-    {
+    ) -> error::Result<()> {
         self.time_offset += delta * 0.0007;
 
         unsafe {
-            encoder.push_graphics_constants(layout, pso::ShaderStageFlags::FRAGMENT, 4*4*4, &[self.time_offset.to_bits()]);
+            encoder.push_graphics_constants(
+                layout,
+                pso::ShaderStageFlags::FRAGMENT,
+                4 * 4 * 4,
+                &[self.time_offset.to_bits()],
+            );
             // Skybox
             encoder.bind_graphics_pipeline(sky_pipeline);
             encoder.bind_vertex_buffers(0, Some((&*self.buffer_sky_box.buffer, 0)));
@@ -760,7 +764,11 @@ impl <B> QMap<B>
         Ok(())
     }
 
-    pub unsafe fn destroy(self, device: &B::Device, allocator: &mut alloc::GPUAlloc<B, impl alloc::RangeAlloc>) {
+    pub unsafe fn destroy(
+        self,
+        device: &B::Device,
+        allocator: &mut alloc::GPUAlloc<B, impl alloc::RangeAlloc>,
+    ) {
         self.buffer.destroy(device, allocator);
         self.buffer_sky.destroy(device, allocator);
         self.buffer_sky_box.destroy(device, allocator);
@@ -769,114 +777,65 @@ impl <B> QMap<B>
         self.texture_light.destroy(device, allocator);
     }
 
-    fn gen_sky_box(textures: &Vec<atlas::Rect>, tex: i32, min: Vector3<f32>, max: Vector3<f32>) -> Vec<super::Vertex> {
+    fn gen_sky_box(
+        textures: &Vec<atlas::Rect>,
+        tex: i32,
+        min: Vector3<f32>,
+        max: Vector3<f32>,
+    ) -> Vec<super::Vertex> {
         let tex = textures[tex as usize];
 
         let mut verts = vec![];
 
         let width = (tex.width / 2) as u16;
 
-        for z in 0 .. 2 {
+        for z in 0..2 {
             let offset = z as f32 * 100.0;
             verts.push(super::Vertex {
-                position: [
-                    min.x,
-                    min.y,
-                    max.z + offset
-                ],
+                position: [min.x, min.y, max.z + offset],
                 tex: [tex.x as u16 + width * z, tex.y as u16],
-                tex_info: [
-                    0,
-                    0,
-                    width as i16,
-                    tex.height as i16,
-                ],
+                tex_info: [0, 0, width as i16, tex.height as i16],
                 light_info: [0, 0],
                 light: 0,
                 light_type: z as u8,
             });
             verts.push(super::Vertex {
-                position: [
-                    min.x,
-                    max.y,
-                    max.z + offset
-                ],
+                position: [min.x, max.y, max.z + offset],
                 tex: [tex.x as u16 + width * z, tex.y as u16],
-                tex_info: [
-                    0,
-                    0,
-                    width as i16,
-                    tex.height as i16,
-                ],
+                tex_info: [0, 0, width as i16, tex.height as i16],
                 light_info: [0, 0],
                 light: 0,
                 light_type: z as u8,
             });
             verts.push(super::Vertex {
-                position: [
-                    max.x,
-                    min.y,
-                    max.z + offset
-                ],
+                position: [max.x, min.y, max.z + offset],
                 tex: [tex.x as u16 + width * z, tex.y as u16],
-                tex_info: [
-                    0,
-                    0,
-                    width as i16,
-                    tex.height as i16,
-                ],
+                tex_info: [0, 0, width as i16, tex.height as i16],
                 light_info: [0, 0],
                 light: 0,
                 light_type: z as u8,
             });
 
             verts.push(super::Vertex {
-                position: [
-                    min.x,
-                    max.y,
-                    max.z + offset
-                ],
+                position: [min.x, max.y, max.z + offset],
                 tex: [tex.x as u16 + width * z, tex.y as u16],
-                tex_info: [
-                    0,
-                    0,
-                    width as i16,
-                    tex.height as i16,
-                ],
+                tex_info: [0, 0, width as i16, tex.height as i16],
                 light_info: [0, 0],
                 light: 0,
                 light_type: z as u8,
             });
             verts.push(super::Vertex {
-                position: [
-                    max.x,
-                    max.y,
-                    max.z + offset
-                ],
+                position: [max.x, max.y, max.z + offset],
                 tex: [tex.x as u16 + width * z, tex.y as u16],
-                tex_info: [
-                    0,
-                    0,
-                    width as i16,
-                    tex.height as i16,
-                ],
+                tex_info: [0, 0, width as i16, tex.height as i16],
                 light_info: [0, 0],
                 light: 0,
                 light_type: z as u8,
             });
             verts.push(super::Vertex {
-                position: [
-                    max.x,
-                    min.y,
-                    max.z + offset
-                ],
+                position: [max.x, min.y, max.z + offset],
                 tex: [tex.x as u16 + width * z, tex.y as u16],
-                tex_info: [
-                    0,
-                    0,
-                    width as i16,
-                    tex.height as i16,
-                ],
+                tex_info: [0, 0, width as i16, tex.height as i16],
                 light_info: [0, 0],
                 light: 0,
                 light_type: z as u8,

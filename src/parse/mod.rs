@@ -1,14 +1,13 @@
-
+use byteorder::{LittleEndian, ReadBytesExt};
 use std::io::{self, Read};
 use std::str;
-use byteorder::{ReadBytesExt, LittleEndian};
 
 macro_rules! read_string {
-    ($r:ident, $len:expr) => ({
+    ($r:ident, $len:expr) => {{
         let mut data = [0u8; $len];
         $r.read_exact(&mut data)?;
         data
-    })
+    }};
 }
 
 pub trait CRead {
@@ -21,7 +20,10 @@ pub trait CRead {
     fn read_float(&mut self) -> io::Result<f32>;
 }
 
-impl <T> CRead for T where T: Read {
+impl<T> CRead for T
+where
+    T: Read,
+{
     fn read_char(&mut self) -> io::Result<i8> {
         self.read_i8()
     }
@@ -45,10 +47,8 @@ impl <T> CRead for T where T: Read {
     }
 }
 
-pub fn from_cstring(data: &[u8]) -> Result<String, str::Utf8Error>  {
-    let end = data.iter()
-        .position(|&v| v == 0)
-        .unwrap_or(data.len());
+pub fn from_cstring(data: &[u8]) -> Result<String, str::Utf8Error> {
+    let end = data.iter().position(|&v| v == 0).unwrap_or(data.len());
     let data = str::from_utf8(&data[..end])?;
     Ok(data.to_owned())
 }

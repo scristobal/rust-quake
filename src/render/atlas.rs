@@ -1,5 +1,3 @@
-
-
 pub struct TextureAtlas {
     free_rects: Vec<Rect>,
     padding: i32,
@@ -8,14 +6,24 @@ pub struct TextureAtlas {
 impl TextureAtlas {
     pub fn new(width: i32, height: i32) -> TextureAtlas {
         TextureAtlas {
-            free_rects: vec![Rect{x: 0, y: 0, width: width, height: height}],
+            free_rects: vec![Rect {
+                x: 0,
+                y: 0,
+                width: width,
+                height: height,
+            }],
             padding: 0,
         }
     }
 
     pub fn new_padded(width: i32, height: i32, padding: i32) -> TextureAtlas {
         TextureAtlas {
-            free_rects: vec![Rect{x: 0, y: 0, width: width, height: height}],
+            free_rects: vec![Rect {
+                x: 0,
+                y: 0,
+                width: width,
+                height: height,
+            }],
             padding: padding,
         }
     }
@@ -29,8 +37,10 @@ impl TextureAtlas {
             // Will it fit the requested size and is it
             // a tighter fit than the previous match we found?
             if score >= 0
-                && free.width >= width && free.height >= height
-                && best.map_or(true, |v| v.0 > score) {
+                && free.width >= width
+                && free.height >= height
+                && best.map_or(true, |v| v.0 > score)
+            {
                 best = Some((score, idx));
                 if score == 0 {
                     // Found a perfect match
@@ -72,8 +82,8 @@ impl TextureAtlas {
             Some(Rect {
                 x: ret.x + self.padding,
                 y: ret.y + self.padding,
-                width: ret.width - self.padding*2,
-                height: ret.height - self.padding*2,
+                width: ret.width - self.padding * 2,
+                height: ret.height - self.padding * 2,
             })
         } else {
             None

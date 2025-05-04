@@ -1,12 +1,11 @@
-
-use std::path::Path;
-use std::io::{self, Read, Seek, SeekFrom};
-use std::fs::File;
-use std::collections::HashMap;
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::{self, Read, Seek, SeekFrom};
+use std::path::Path;
 
-use crate::parse::*;
 use crate::error;
+use crate::parse::*;
 
 pub struct PackFile {
     file: RefCell<File>,
@@ -21,7 +20,8 @@ struct Entry {
 impl PackFile {
     // TODO: Fix error type
     pub fn new<P>(name: P) -> error::Result<PackFile>
-        where P: AsRef<Path>
+    where
+        P: AsRef<Path>,
     {
         let mut f = File::open(name)?;
 
@@ -37,16 +37,19 @@ impl PackFile {
 
         let mut entries = HashMap::default();
 
-        for _ in 0 .. size {
+        for _ in 0..size {
             let name = read_string!(f, 0x38);
             let entry_offset = f.read_long()?;
             let entry_size = f.read_long()?;
 
             let name = from_cstring(&name)?;
-            entries.insert(name, Entry {
-                offset: entry_offset as u64,
-                size: entry_size as u64,
-            });
+            entries.insert(
+                name,
+                Entry {
+                    offset: entry_offset as u64,
+                    size: entry_size as u64,
+                },
+            );
         }
 
         Ok(PackFile {
@@ -63,7 +66,10 @@ impl PackFile {
             file.read_exact(&mut data)?;
             Ok(data)
         } else {
-            Err(io::Error::new(io::ErrorKind::NotFound, "No such file in the pak"))
+            Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "No such file in the pak",
+            ))
         }
     }
 }

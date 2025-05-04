@@ -1,15 +1,7 @@
-
+use crate::bitset::BitSet;
+use hal::{Backend, Device, Limits, MemoryType, adapter, memory};
 use std::marker::PhantomData;
 use std::ops::Range;
-use hal::{
-    Device,
-    Limits,
-    Backend,
-    MemoryType,
-    adapter,
-    memory,
-};
-use crate::bitset::BitSet;
 
 const REGION_SIZE: u64 = 64 * 1024 * 1024; // 64mb
 
@@ -19,9 +11,10 @@ pub struct GPUAlloc<B: Backend, A: RangeAlloc> {
     memory: Vec<GPUMemory<B, A>>,
 }
 
-impl <B, A> GPUAlloc<B, A>
-    where A: RangeAlloc,
-          B: Backend,
+impl<B, A> GPUAlloc<B, A>
+where
+    A: RangeAlloc,
+    B: Backend,
 {
     pub unsafe fn new(limits: Limits, memory_types: Vec<MemoryType>) -> GPUAlloc<B, A> {
         GPUAlloc {
@@ -31,24 +24,34 @@ impl <B, A> GPUAlloc<B, A>
         }
     }
 
-    pub unsafe fn allocate(&mut self, device: &B::Device, ty: Type, requirements: &memory::Requirements, properties: memory::Properties) -> Allocation<B> {
+    pub unsafe fn allocate(
+        &mut self,
+        device: &B::Device,
+        ty: Type,
+        requirements: &memory::Requirements,
+        properties: memory::Properties,
+    ) -> Allocation<B> {
         // Try existing memory
         for m in &mut self.memory {
-            if requirements.type_mask & (1 << m.type_id.0) != 0 && m.ty.properties.contains(properties) {
+            if requirements.type_mask & (1 << m.type_id.0) != 0
+                && m.ty.properties.contains(properties)
+            {
                 // Found something, use it
                 return m.allocate(&self.limits, device, ty, requirements);
             }
         }
 
         // New memory
-        let memory_type_id = self.memory_types.iter()
-                .enumerate()
-                .find(|&(id, memory_type)|
-                    requirements.type_mask & (1 << id) != 0
-                        && memory_type.properties.contains(properties)
-                )
-                .map(|(id, _)| adapter::MemoryTypeId(id))
-                .unwrap();
+        let memory_type_id = self
+            .memory_types
+            .iter()
+            .enumerate()
+            .find(|&(id, memory_type)| {
+                requirements.type_mask & (1 << id) != 0
+                    && memory_type.properties.contains(properties)
+            })
+            .map(|(id, _)| adapter::MemoryTypeId(id))
+            .unwrap();
         let mut memory = GPUMemory {
             id: self.memory.len(),
             type_id: memory_type_id,
@@ -79,8 +82,9 @@ pub struct Allocation<B: Backend> {
     pub range: Range<u64>,
 }
 
-impl <B> Allocation<B>
-    where B: Backend
+impl<B> Allocation<B>
+where
+    B: Backend,
 {
     pub fn memory(&self) -> &B::Memory {
         self.memory
@@ -94,11 +98,18 @@ struct GPUMemory<B: Backend, A: RangeAlloc> {
     regions: Vec<(A, Box<B::Memory>)>,
 }
 
-impl <B, A> GPUMemory<B, A>
-    where A: RangeAlloc,
-          B: Backend,
+impl<B, A> GPUMemory<B, A>
+where
+    A: RangeAlloc,
+    B: Backend,
 {
-    unsafe fn allocate(&mut self, limits: &Limits, device: &B::Device, ty: Type, requirements: &memory::Requirements) -> Allocation<B> {
+    unsafe fn allocate(
+        &mut self,
+        limits: &Limits,
+        device: &B::Device,
+        ty: Type,
+        requirements: &memory::Requirements,
+    ) -> Allocation<B> {
         // Try existing regions
         for (a, mem) in &mut self.regions {
             if let Some(range) = a.allocate(ty, requirements.size, requirements.alignment) {
@@ -113,12 +124,16 @@ impl <B, A> GPUMemory<B, A>
         // New region
         let mut region = (
             A::new(REGION_SIZE, limits.buffer_image_granularity),
-            Box::new(device.allocate_memory(self.type_id, REGION_SIZE).unwrap())
+            Box::new(device.allocate_memory(self.type_id, REGION_SIZE).unwrap()),
         );
-        let ret = if let Some(range) =  region.0.allocate(ty, requirements.size, requirements.alignment) {
+        let ret = if let Some(range) =
+            region
+                .0
+                .allocate(ty, requirements.size, requirements.alignment)
+        {
             Some(Allocation {
                 owner: self.id,
-                memory:  &*(&*region.1 as *const B::Memory),
+                memory: &*(&*region.1 as *const B::Memory),
                 range: range,
             })
         } else {
@@ -177,45 +192,44 @@ impl RangeAlloc for ChunkAlloc {
         }
     }
     fn allocate(&mut self, ty: Type, size: u64, align: u64) -> Option<Range<u64>> {
-        assert!(CHUNK_SIZE%align == 0);
-        let chunks = (size + (CHUNK_SIZE-1))/CHUNK_SIZE;
+        assert!(CHUNK_SIZE % align == 0);
+        let chunks = (size + (CHUNK_SIZE - 1)) / CHUNK_SIZE;
         let mut idx = 0;
-        let skip = (self.buffer_image_granularity + (CHUNK_SIZE-1))/CHUNK_SIZE;
-    'search:
-        loop {
+        let skip = (self.buffer_image_granularity + (CHUNK_SIZE - 1)) / CHUNK_SIZE;
+        'search: loop {
             // Make sure the value fits within the type region
-            let ty_idx = ((idx * CHUNK_SIZE)/self.buffer_image_granularity) as usize;
+            let ty_idx = ((idx * CHUNK_SIZE) / self.buffer_image_granularity) as usize;
             let typ = *self.used_types.get(ty_idx)?;
-            if typ != None && typ != Some(ty)  {
+            if typ != None && typ != Some(ty) {
                 idx += skip;
             }
-            let ty_idx_end = (((idx + chunks) * CHUNK_SIZE)/self.buffer_image_granularity) as usize;
+            let ty_idx_end =
+                (((idx + chunks) * CHUNK_SIZE) / self.buffer_image_granularity) as usize;
             let typ = *self.used_types.get(ty_idx_end)?;
-            if typ != None && typ != Some(ty)  {
+            if typ != None && typ != Some(ty) {
                 idx += skip;
             }
             // Make sure the region itself is free
-            for off in 0 .. chunks {
+            for off in 0..chunks {
                 if self.used.get((idx + off) as usize) {
                     idx += 1;
                     continue 'search;
                 }
             }
             // Region free, claim it
-            for off in 0 .. chunks {
+            for off in 0..chunks {
                 self.used.set((idx + off) as usize, true);
-                let ty_idx = (((idx + off) * CHUNK_SIZE)/self.buffer_image_granularity) as usize;
+                let ty_idx = (((idx + off) * CHUNK_SIZE) / self.buffer_image_granularity) as usize;
                 self.used_types[ty_idx] = Some(ty);
             }
-            break Some(idx * CHUNK_SIZE .. idx * CHUNK_SIZE + size);
+            break Some(idx * CHUNK_SIZE..idx * CHUNK_SIZE + size);
         }
     }
 
-
     fn free(&mut self, range: Range<u64>) {
-        let start = (range.start + (CHUNK_SIZE-1))/CHUNK_SIZE;
-        let end = (range.end + (CHUNK_SIZE-1))/CHUNK_SIZE;
-        for i in start .. end {
+        let start = (range.start + (CHUNK_SIZE - 1)) / CHUNK_SIZE;
+        let end = (range.end + (CHUNK_SIZE - 1)) / CHUNK_SIZE;
+        for i in start..end {
             self.used.set(i as usize, false);
         }
     }

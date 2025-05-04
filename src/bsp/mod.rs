@@ -1,17 +1,16 @@
-
+use cgmath::Vector3;
 use std::io::{Read, Seek, SeekFrom};
 use std::ops::Range;
-use cgmath::Vector3;
 
 use crate::error;
 use crate::parse::*;
 
-const SIZE_TEXTURE_INFO: usize = 4*6 + 4*2 + 4*2;
+const SIZE_TEXTURE_INFO: usize = 4 * 6 + 4 * 2 + 4 * 2;
 const SIZE_VERTEX: usize = 4 * 3;
 const SIZE_EDGE: usize = 2 + 2;
-const SIZE_PLANE: usize = 4*3 + 4 + 4;
+const SIZE_PLANE: usize = 4 * 3 + 4 + 4;
 const SIZE_FACE: usize = 2 + 2 + 4 + 2 + 2 + 4 + 4;
-const SIZE_MODEL: usize = (4*3)*3 + 4*4 + 4 + 4 + 4;
+const SIZE_MODEL: usize = (4 * 3) * 3 + 4 * 4 + 4 + 4 + 4;
 
 pub struct BspFile {
     pub light_maps: Vec<u8>,
@@ -26,9 +25,9 @@ pub struct BspFile {
 
 impl BspFile {
     pub fn parse<R>(r: &mut R) -> error::Result<BspFile>
-        where R: Read + Seek,
+    where
+        R: Read + Seek,
     {
-
         let version = r.read_long()?;
 
         if version != 29 {
@@ -64,7 +63,7 @@ impl BspFile {
         r.seek(SeekFrom::Start(e_vertices.offset as u64))?;
         let vlen = e_vertices.size as usize / SIZE_VERTEX;
         let mut vertices = Vec::with_capacity(vlen);
-        for _ in 0 .. vlen {
+        for _ in 0..vlen {
             vertices.push(Vector3::new(
                 r.read_float()?,
                 r.read_float()?,
@@ -78,7 +77,7 @@ impl BspFile {
         let lelen = e_ledges.size as usize / 4;
         let mut ledges = Vec::with_capacity(lelen);
         r.seek(SeekFrom::Start(e_ledges.offset as u64))?;
-        for _ in 0 .. lelen {
+        for _ in 0..lelen {
             ledges.push(r.read_long()?);
         }
 
@@ -111,26 +110,15 @@ pub struct Model {
 
 impl Model {
     pub fn parse<R>(count: usize, r: &mut R) -> error::Result<Vec<Model>>
-        where R: Read + Seek,
+    where
+        R: Read + Seek,
     {
         let mut models = Vec::with_capacity(count);
 
-        for _ in 0 .. count {
-            let bound_min = Vector3::new(
-                r.read_float()?,
-                r.read_float()?,
-                r.read_float()?,
-            );
-            let bound_max = Vector3::new(
-                r.read_float()?,
-                r.read_float()?,
-                r.read_float()?,
-            );
-            let origin = Vector3::new(
-                r.read_float()?,
-                r.read_float()?,
-                r.read_float()?,
-            );
+        for _ in 0..count {
+            let bound_min = Vector3::new(r.read_float()?, r.read_float()?, r.read_float()?);
+            let bound_max = Vector3::new(r.read_float()?, r.read_float()?, r.read_float()?);
+            let origin = Vector3::new(r.read_float()?, r.read_float()?, r.read_float()?);
             let _node_id = [
                 r.read_long()?,
                 r.read_long()?,
@@ -144,7 +132,7 @@ impl Model {
             models.push(Model {
                 bound: (bound_min, bound_max),
                 origin: origin,
-                faces: face_start as usize .. (face_start as usize + face_number as usize),
+                faces: face_start as usize..(face_start as usize + face_number as usize),
             });
         }
 
@@ -165,25 +153,23 @@ pub struct Face {
 
 impl Face {
     pub fn parse<R>(count: usize, r: &mut R) -> error::Result<Vec<Face>>
-        where R: Read + Seek,
+    where
+        R: Read + Seek,
     {
         let mut faces = Vec::with_capacity(count);
 
-        for _ in 0 .. count {
+        for _ in 0..count {
             faces.push(Face {
                 plane: r.read_ushort()? as usize,
                 front: r.read_ushort()? == 0,
                 ledges: {
                     let start = r.read_long()? as usize;
-                    start .. (start + r.read_ushort()? as usize)
+                    start..(start + r.read_ushort()? as usize)
                 },
                 texture_info: r.read_ushort()? as usize,
                 type_light: r.read_uchar()?,
                 base_light: r.read_uchar()?,
-                light: [
-                    r.read_uchar()?,
-                    r.read_uchar()?,
-                ],
+                light: [r.read_uchar()?, r.read_uchar()?],
                 light_map: r.read_long()?,
             });
         }
@@ -200,17 +186,14 @@ pub struct Plane {
 
 impl Plane {
     pub fn parse<R>(count: usize, r: &mut R) -> error::Result<Vec<Plane>>
-        where R: Read + Seek,
+    where
+        R: Read + Seek,
     {
         let mut planes = Vec::with_capacity(count);
 
-        for _ in 0 .. count {
+        for _ in 0..count {
             planes.push(Plane {
-                normal: Vector3::new(
-                    r.read_float()?,
-                    r.read_float()?,
-                    r.read_float()?,
-                ),
+                normal: Vector3::new(r.read_float()?, r.read_float()?, r.read_float()?),
                 distance: r.read_float()?,
                 kind: r.read_long()?,
             });
@@ -223,11 +206,16 @@ impl Plane {
 pub struct Edge(pub Vector3<f32>, pub Vector3<f32>);
 
 impl Edge {
-    pub fn parse<R>(count: usize, vertices: Vec<Vector3<f32>>, r: &mut R) -> error::Result<Vec<Edge>>
-        where R: Read + Seek,
+    pub fn parse<R>(
+        count: usize,
+        vertices: Vec<Vector3<f32>>,
+        r: &mut R,
+    ) -> error::Result<Vec<Edge>>
+    where
+        R: Read + Seek,
     {
         let mut edges = Vec::with_capacity(count);
-        for _ in 0 .. count {
+        for _ in 0..count {
             edges.push(Edge(
                 vertices[r.read_ushort()? as usize],
                 vertices[r.read_ushort()? as usize],
@@ -248,22 +236,15 @@ pub struct TextureInfo {
 
 impl TextureInfo {
     pub fn parse<R>(count: usize, r: &mut R) -> error::Result<Vec<TextureInfo>>
-        where R: Read + Seek,
+    where
+        R: Read + Seek,
     {
         let mut info = Vec::with_capacity(count);
 
-        for _ in 0 .. count {
-            let vector_s = Vector3::new(
-                r.read_float()?,
-                r.read_float()?,
-                r.read_float()?,
-            );
+        for _ in 0..count {
+            let vector_s = Vector3::new(r.read_float()?, r.read_float()?, r.read_float()?);
             let dist_s = r.read_float()?;
-            let vector_t = Vector3::new(
-                r.read_float()?,
-                r.read_float()?,
-                r.read_float()?,
-            );
+            let vector_t = Vector3::new(r.read_float()?, r.read_float()?, r.read_float()?);
             let dist_t = r.read_float()?;
             let texture = r.read_ulong()?;
             let animated = r.read_ulong()? != 0;
@@ -293,18 +274,19 @@ pub struct Texture {
 
 impl Texture {
     pub fn parse_textures<R>(r: &mut R) -> error::Result<Vec<Texture>>
-        where R: Read + Seek,
+    where
+        R: Read + Seek,
     {
         let base_offset = r.seek(SeekFrom::Current(0))?;
         let count = r.read_long()?;
 
         let mut textures = Vec::with_capacity(count as usize);
-        for id in 0 .. count {
+        for id in 0..count {
             let offset = r.read_long()?;
             if offset == -1 {
                 textures.push(Texture {
                     id: -1,
-                    .. Texture::default()
+                    ..Texture::default()
                 });
                 continue;
             }
@@ -337,7 +319,7 @@ impl Texture {
             };
 
             for (i, o) in offsets.into_iter().enumerate() {
-                r.seek(SeekFrom::Start(base_offset + offset as u64 + *o as u64))?;
+                r.seek(SeekFrom::Start(base_offset + offset as u64 + o as u64))?;
                 let w = width >> i;
                 let h = height >> i;
                 let mut data = vec![0; (w * h) as usize];
@@ -371,7 +353,8 @@ struct Entry {
 
 impl Entry {
     fn read<R>(r: &mut R) -> error::Result<Entry>
-        where R: Read,
+    where
+        R: Read,
     {
         Ok(Entry {
             offset: r.read_long()?,

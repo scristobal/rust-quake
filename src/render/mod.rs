@@ -1,61 +1,29 @@
-
+mod alloc;
 mod atlas;
 mod qmap;
-mod alloc;
 mod util;
 
 use util::*;
 
-use std::rc::Rc;
-use std::mem::{ManuallyDrop, size_of};
 use log::*;
+use std::mem::{ManuallyDrop, size_of};
+use std::rc::Rc;
 
-use crate::pak::PackFile;
-use crate::error;
 use crate::bsp;
+use crate::error;
+use crate::pak::PackFile;
 
 use hal::{
-    Backend,
-    Device,
-    PhysicalDevice,
-    Surface,
+    Adapter, Backend, CommandPool, DescriptorPool, Device, PhysicalDevice, Surface, Swapchain,
     SwapchainConfig,
-    Swapchain,
-    Adapter,
-    CommandPool,
-    DescriptorPool,
-    pass::{
-        self,
-    },
-    image::{
-        self,
-    },
-    format::{
-        self,
-        ChannelType,
-        Swizzle,
-    },
-    pso::{
-        self,
-        PipelineStage,
-        EntryPoint,
-        GraphicsShaderSet,
-        Rasterizer,
-    },
-    window::{
-        Extent2D,
-    },
-    pool::{
-        self,
-    },
-    command::{
-        self,
-        CommandBuffer,
-    },
-    queue::{
-        Submission,
-        family::QueueGroup,
-    },
+    command::{self, CommandBuffer},
+    format::{self, ChannelType, Swizzle},
+    image::{self},
+    pass::{self},
+    pool::{self},
+    pso::{self, EntryPoint, GraphicsShaderSet, PipelineStage, Rasterizer},
+    queue::{Submission, family::QueueGroup},
+    window::Extent2D,
 };
 
 use cgmath;
@@ -136,14 +104,14 @@ struct GfxState<B: Backend> {
     texture_palette_map: ImageBundle<B>,
 }
 
-impl <B: Backend> Renderer<B> {
+impl<B: Backend> Renderer<B> {
     pub fn new(
-        pak: Rc<PackFile>, level: bsp::BspFile,
+        pak: Rc<PackFile>,
+        level: bsp::BspFile,
         mut adapter: Adapter<B>,
         mut surface: B::Surface,
         size: (f64, f64),
-    ) -> error::Result<Renderer<B>>
-    {
+    ) -> error::Result<Renderer<B>> {
         let size = (size.0 as u32, size.1 as u32);
 
         let (device, mut queue_group) = adapter
@@ -196,35 +164,44 @@ impl <B: Backend> Renderer<B> {
             let in_dependency = pass::SubpassDependency {
                 passes: pass::SubpassRef::External..pass::SubpassRef::Pass(0),
                 stages: PipelineStage::COLOR_ATTACHMENT_OUTPUT
-                    .. PipelineStage::COLOR_ATTACHMENT_OUTPUT | PipelineStage::EARLY_FRAGMENT_TESTS,
+                    ..PipelineStage::COLOR_ATTACHMENT_OUTPUT | PipelineStage::EARLY_FRAGMENT_TESTS,
                 accesses: image::Access::empty()
-                    ..(
-                        image::Access::COLOR_ATTACHMENT_READ | image::Access::COLOR_ATTACHMENT_WRITE
-                        | image::Access::DEPTH_STENCIL_ATTACHMENT_READ | image::Access::DEPTH_STENCIL_ATTACHMENT_WRITE
-                    ),
+                    ..(image::Access::COLOR_ATTACHMENT_READ
+                        | image::Access::COLOR_ATTACHMENT_WRITE
+                        | image::Access::DEPTH_STENCIL_ATTACHMENT_READ
+                        | image::Access::DEPTH_STENCIL_ATTACHMENT_WRITE),
             };
 
             let out_dependency = pass::SubpassDependency {
-                passes: pass::SubpassRef::Pass(0) .. pass::SubpassRef::External,
+                passes: pass::SubpassRef::Pass(0)..pass::SubpassRef::External,
                 stages: PipelineStage::COLOR_ATTACHMENT_OUTPUT | PipelineStage::EARLY_FRAGMENT_TESTS
-                    .. PipelineStage::COLOR_ATTACHMENT_OUTPUT,
-                accesses: (
-                        image::Access::COLOR_ATTACHMENT_READ | image::Access::COLOR_ATTACHMENT_WRITE
-                        | image::Access::DEPTH_STENCIL_ATTACHMENT_READ | image::Access::DEPTH_STENCIL_ATTACHMENT_WRITE
-                    ) .. image::Access::empty(),
+                    ..PipelineStage::COLOR_ATTACHMENT_OUTPUT,
+                accesses: (image::Access::COLOR_ATTACHMENT_READ
+                    | image::Access::COLOR_ATTACHMENT_WRITE
+                    | image::Access::DEPTH_STENCIL_ATTACHMENT_READ
+                    | image::Access::DEPTH_STENCIL_ATTACHMENT_WRITE)
+                    ..image::Access::empty(),
             };
 
-            unsafe { device.create_render_pass(
-                &[attachment, attachment_depth],
-                &[subpass],
-                &[in_dependency, out_dependency]
-            ) }
-                .expect("Can't create render pass")
+            unsafe {
+                device.create_render_pass(
+                    &[attachment, attachment_depth],
+                    &[subpass],
+                    &[in_dependency, out_dependency],
+                )
+            }
+            .expect("Can't create render pass")
         };
 
         let (swap_chain, framebuffers, frame_images, depth_images) = Self::make_swapchain(
-            &mut adapter, &device, &mut allocator, &mut surface, &render_pass, None,
-            size.0, size.1,
+            &mut adapter,
+            &device,
+            &mut allocator,
+            &mut surface,
+            &render_pass,
+            None,
+            size.0,
+            size.1,
         );
 
         let num_framebuffers = framebuffers.len();
@@ -245,7 +222,10 @@ impl <B: Backend> Renderer<B> {
             unsafe {
                 cmd_pools.push(
                     device
-                        .create_command_pool_typed(&queue_group, pool::CommandPoolCreateFlags::empty())
+                        .create_command_pool_typed(
+                            &queue_group,
+                            pool::CommandPoolCreateFlags::empty(),
+                        )
                         .expect("Can't create command pool"),
                 );
             }
@@ -278,14 +258,22 @@ impl <B: Backend> Renderer<B> {
             let palette_map = pak.file("gfx/palette.lmp")?;
 
             let texture_colour_map = ImageBundle::new(
-                &device, &mut allocator, 256, 64, 1,
+                &device,
+                &mut allocator,
+                256,
+                64,
+                1,
                 format::Format::R8Unorm,
-                hal::image::Filter::Nearest
+                hal::image::Filter::Nearest,
             );
             let texture_palette_map = ImageBundle::new(
-                &device, &mut allocator, 16, 16, 4,
+                &device,
+                &mut allocator,
+                16,
+                16,
+                4,
                 format::Format::Rgba8Srgb,
-                hal::image::Filter::Nearest
+                hal::image::Filter::Nearest,
             );
             let mut pm = Vec::with_capacity((palette_map.len() / 3) * 4);
             for data in palette_map.chunks_exact(3) {
@@ -300,33 +288,43 @@ impl <B: Backend> Renderer<B> {
                 &mut allocator,
                 (texture_colour_map.row_pitch * 64) as u64,
                 hal::buffer::Usage::TRANSFER_SRC,
-                hal::memory::Properties::CPU_VISIBLE
+                hal::memory::Properties::CPU_VISIBLE,
             );
             let staging_buffer_p = BufferBundle::new(
                 &device,
                 &mut allocator,
                 (texture_palette_map.row_pitch * 16) as u64,
                 hal::buffer::Usage::TRANSFER_SRC,
-                hal::memory::Properties::CPU_VISIBLE
+                hal::memory::Properties::CPU_VISIBLE,
             );
 
             {
-                let mut data_target = device.acquire_mapping_writer(staging_buffer.memory.memory(), staging_buffer.memory.range.clone()).unwrap();
-                for y in 0 .. 64 {
+                let mut data_target = device
+                    .acquire_mapping_writer(
+                        staging_buffer.memory.memory(),
+                        staging_buffer.memory.range.clone(),
+                    )
+                    .unwrap();
+                for y in 0..64 {
                     let idx = y * 256;
-                    let data = &colour_map[idx as usize .. (idx + 256) as usize];
+                    let data = &colour_map[idx as usize..(idx + 256) as usize];
                     let d_idx = y * texture_colour_map.row_pitch;
                     data_target[d_idx as usize..(d_idx + 256) as usize].copy_from_slice(&data);
                 }
                 device.release_mapping_writer(data_target).unwrap();
             }
             {
-                let mut data_target = device.acquire_mapping_writer(staging_buffer_p.memory.memory(), staging_buffer_p.memory.range.clone()).unwrap();
-                for y in 0 .. 16 {
+                let mut data_target = device
+                    .acquire_mapping_writer(
+                        staging_buffer_p.memory.memory(),
+                        staging_buffer_p.memory.range.clone(),
+                    )
+                    .unwrap();
+                for y in 0..16 {
                     let idx = y * 16 * 4;
-                    let data = &pm[idx as usize .. (idx + 16*4) as usize];
+                    let data = &pm[idx as usize..(idx + 16 * 4) as usize];
                     let d_idx = y * texture_palette_map.row_pitch;
-                    data_target[d_idx as usize..(d_idx + 16*4) as usize].copy_from_slice(&data);
+                    data_target[d_idx as usize..(d_idx + 16 * 4) as usize].copy_from_slice(&data);
                 }
                 device.release_mapping_writer(data_target).unwrap();
             }
@@ -335,12 +333,15 @@ impl <B: Backend> Renderer<B> {
             let mut cmd = cmd_pools[0].acquire_command_buffer::<command::OneShot>();
             cmd.begin();
             cmd.pipeline_barrier(
-                pso::PipelineStage::TOP_OF_PIPE .. pso::PipelineStage::TRANSFER,
+                pso::PipelineStage::TOP_OF_PIPE..pso::PipelineStage::TRANSFER,
                 hal::memory::Dependencies::empty(),
                 &[
                     hal::memory::Barrier::Image {
                         states: (image::Access::empty(), image::Layout::Undefined)
-                            .. (image::Access::TRANSFER_WRITE, image::Layout::TransferDstOptimal),
+                            ..(
+                                image::Access::TRANSFER_WRITE,
+                                image::Layout::TransferDstOptimal,
+                            ),
                         target: &*texture_colour_map.image,
                         families: None,
                         range: image::SubresourceRange {
@@ -351,7 +352,10 @@ impl <B: Backend> Renderer<B> {
                     },
                     hal::memory::Barrier::Image {
                         states: (image::Access::empty(), image::Layout::Undefined)
-                            .. (image::Access::TRANSFER_WRITE, image::Layout::TransferDstOptimal),
+                            ..(
+                                image::Access::TRANSFER_WRITE,
+                                image::Layout::TransferDstOptimal,
+                            ),
                         target: &*texture_palette_map.image,
                         families: None,
                         range: image::SubresourceRange {
@@ -359,8 +363,8 @@ impl <B: Backend> Renderer<B> {
                             levels: 0..1,
                             layers: 0..1,
                         },
-                    }
-                ]
+                    },
+                ],
             );
             cmd.copy_buffer_to_image(
                 &staging_buffer.buffer,
@@ -375,7 +379,7 @@ impl <B: Backend> Renderer<B> {
                         level: 0,
                         layers: 0..1,
                     },
-                    image_offset: image::Offset { x: 0, y: 0, z: 0},
+                    image_offset: image::Offset { x: 0, y: 0, z: 0 },
                     image_extent: image::Extent {
                         width: 256,
                         height: 64,
@@ -396,7 +400,7 @@ impl <B: Backend> Renderer<B> {
                         level: 0,
                         layers: 0..1,
                     },
-                    image_offset: image::Offset { x: 0, y: 0, z: 0},
+                    image_offset: image::Offset { x: 0, y: 0, z: 0 },
                     image_extent: image::Extent {
                         width: 16,
                         height: 16,
@@ -405,12 +409,18 @@ impl <B: Backend> Renderer<B> {
                 }],
             );
             cmd.pipeline_barrier(
-                pso::PipelineStage::TRANSFER .. pso::PipelineStage::FRAGMENT_SHADER,
+                pso::PipelineStage::TRANSFER..pso::PipelineStage::FRAGMENT_SHADER,
                 hal::memory::Dependencies::empty(),
                 &[
                     hal::memory::Barrier::Image {
-                        states: (image::Access::TRANSFER_WRITE, image::Layout::TransferDstOptimal)
-                            .. (image::Access::SHADER_READ, image::Layout::ShaderReadOnlyOptimal),
+                        states: (
+                            image::Access::TRANSFER_WRITE,
+                            image::Layout::TransferDstOptimal,
+                        )
+                            ..(
+                                image::Access::SHADER_READ,
+                                image::Layout::ShaderReadOnlyOptimal,
+                            ),
                         target: &*texture_colour_map.image,
                         families: None,
                         range: image::SubresourceRange {
@@ -420,8 +430,14 @@ impl <B: Backend> Renderer<B> {
                         },
                     },
                     hal::memory::Barrier::Image {
-                        states: (image::Access::TRANSFER_WRITE, image::Layout::TransferDstOptimal)
-                            .. (image::Access::SHADER_READ, image::Layout::ShaderReadOnlyOptimal),
+                        states: (
+                            image::Access::TRANSFER_WRITE,
+                            image::Layout::TransferDstOptimal,
+                        )
+                            ..(
+                                image::Access::SHADER_READ,
+                                image::Layout::ShaderReadOnlyOptimal,
+                            ),
                         target: &*texture_palette_map.image,
                         families: None,
                         range: image::SubresourceRange {
@@ -430,7 +446,7 @@ impl <B: Backend> Renderer<B> {
                             layers: 0..1,
                         },
                     },
-                ]
+                ],
             );
             cmd.finish();
 
@@ -444,44 +460,74 @@ impl <B: Backend> Renderer<B> {
             (texture_colour_map, texture_palette_map)
         };
 
-
-        let level = qmap::QMap::new(level, &mut adapter, &device, &mut queue_group.queues[0], &mut cmd_pools[0], &mut allocator)?;
+        let level = qmap::QMap::new(
+            level,
+            &mut adapter,
+            &device,
+            &mut queue_group.queues[0],
+            &mut cmd_pools[0],
+            &mut allocator,
+        )?;
 
         let mut compiler = shaderc::Compiler::new().unwrap();
         let vca = compiler
-            .compile_into_spirv(include_str!("shader/main.glslv"), shaderc::ShaderKind::Vertex, "main.glslv", "main", None)
-            .map_err(|e| {error!("{}", e); e})
+            .compile_into_spirv(
+                include_str!("shader/main.glslv"),
+                shaderc::ShaderKind::Vertex,
+                "main.glslv",
+                "main",
+                None,
+            )
+            .map_err(|e| {
+                error!("{}", e);
+                e
+            })
             .unwrap();
         let fca = compiler
-            .compile_into_spirv(include_str!("shader/main.glslf"), shaderc::ShaderKind::Fragment, "main.glslf", "main", None)
-            .map_err(|e| {error!("{}", e); e})
+            .compile_into_spirv(
+                include_str!("shader/main.glslf"),
+                shaderc::ShaderKind::Fragment,
+                "main.glslf",
+                "main",
+                None,
+            )
+            .map_err(|e| {
+                error!("{}", e);
+                e
+            })
             .unwrap();
 
         let s_vca = compiler
-            .compile_into_spirv(include_str!("shader/sky.glslv"), shaderc::ShaderKind::Vertex, "sky.glslv", "main", None)
-            .map_err(|e| {error!("{}", e); e})
+            .compile_into_spirv(
+                include_str!("shader/sky.glslv"),
+                shaderc::ShaderKind::Vertex,
+                "sky.glslv",
+                "main",
+                None,
+            )
+            .map_err(|e| {
+                error!("{}", e);
+                e
+            })
             .unwrap();
         let s_fca = compiler
-            .compile_into_spirv(include_str!("shader/sky.glslf"), shaderc::ShaderKind::Fragment, "sky.glslf", "main", None)
-            .map_err(|e| {error!("{}", e); e})
+            .compile_into_spirv(
+                include_str!("shader/sky.glslf"),
+                shaderc::ShaderKind::Fragment,
+                "sky.glslf",
+                "main",
+                None,
+            )
+            .map_err(|e| {
+                error!("{}", e);
+                e
+            })
             .unwrap();
 
-        let vsm = unsafe {
-            device.create_shader_module(vca.as_binary_u8())
-                .unwrap()
-        };
-        let fsm = unsafe {
-            device.create_shader_module(fca.as_binary_u8())
-                .unwrap()
-        };
-        let s_vsm = unsafe {
-            device.create_shader_module(s_vca.as_binary_u8())
-                .unwrap()
-        };
-        let s_fsm = unsafe {
-            device.create_shader_module(s_fca.as_binary_u8())
-                .unwrap()
-        };
+        let vsm = unsafe { device.create_shader_module(vca.as_binary_u8()).unwrap() };
+        let fsm = unsafe { device.create_shader_module(fca.as_binary_u8()).unwrap() };
+        let s_vsm = unsafe { device.create_shader_module(s_vca.as_binary_u8()).unwrap() };
+        let s_fsm = unsafe { device.create_shader_module(s_fca.as_binary_u8()).unwrap() };
 
         let vs_entry = EntryPoint {
             entry: "main",
@@ -538,7 +584,7 @@ impl <B: Backend> Renderer<B> {
                 element: pso::Element {
                     format: format::Format::Rgb32Sfloat,
                     offset: 0,
-                }
+                },
             },
             pso::AttributeDesc {
                 location: 1,
@@ -546,57 +592,47 @@ impl <B: Backend> Renderer<B> {
                 element: pso::Element {
                     format: format::Format::Rg16Uint,
                     offset: size_of::<[f32; 3]>() as u32,
-                }
+                },
             },
             pso::AttributeDesc {
                 location: 2,
                 binding: 0,
                 element: pso::Element {
                     format: format::Format::Rgba16Sint,
-                    offset: (
-                        size_of::<[f32; 3]>()
-                        + size_of::<[u16; 2]>()
-                    ) as u32,
-                }
+                    offset: (size_of::<[f32; 3]>() + size_of::<[u16; 2]>()) as u32,
+                },
             },
             pso::AttributeDesc {
                 location: 3,
                 binding: 0,
                 element: pso::Element {
                     format: format::Format::Rg16Sint,
-                    offset: (
-                        size_of::<[f32; 3]>()
-                        + size_of::<[u16; 2]>()
-                        + size_of::<[i16; 4]>()
-                    ) as u32,
-                }
+                    offset: (size_of::<[f32; 3]>() + size_of::<[u16; 2]>() + size_of::<[i16; 4]>())
+                        as u32,
+                },
             },
             pso::AttributeDesc {
                 location: 4,
                 binding: 0,
                 element: pso::Element {
                     format: format::Format::R8Uint,
-                    offset: (
-                        size_of::<[f32; 3]>()
+                    offset: (size_of::<[f32; 3]>()
                         + size_of::<[u16; 2]>()
                         + size_of::<[i16; 4]>()
-                        + size_of::<[i16; 2]>()
-                    ) as u32,
-                }
+                        + size_of::<[i16; 2]>()) as u32,
+                },
             },
             pso::AttributeDesc {
                 location: 5,
                 binding: 0,
                 element: pso::Element {
                     format: format::Format::R8Uint,
-                    offset: (
-                        size_of::<[f32; 3]>()
+                    offset: (size_of::<[f32; 3]>()
                         + size_of::<[u16; 2]>()
                         + size_of::<[i16; 4]>()
                         + size_of::<[i16; 2]>()
-                        + size_of::<u8>()
-                    ) as u32,
-                }
+                        + size_of::<u8>()) as u32,
+                },
             },
         ];
 
@@ -612,7 +648,7 @@ impl <B: Backend> Renderer<B> {
         let depth_stencil = pso::DepthStencilDesc {
             depth: pso::DepthTest::On {
                 fun: pso::Comparison::LessEqual,
-                write: true
+                write: true,
             },
             depth_bounds: false,
             stencil: pso::StencilTest::Off,
@@ -620,92 +656,103 @@ impl <B: Backend> Renderer<B> {
 
         let blender = pso::BlendDesc {
             logic_op: Some(pso::LogicOp::Copy),
-            targets: vec![pso::ColorBlendDesc(pso::ColorMask::ALL, pso::BlendState::Off)],
+            targets: vec![pso::ColorBlendDesc(
+                pso::ColorMask::ALL,
+                pso::BlendState::Off,
+            )],
         };
         let baked_states = pso::BakedStates::default();
 
-        let descriptor_set_layouts = unsafe { vec![
-            device.create_descriptor_set_layout(
-                &[
-                    pso::DescriptorSetLayoutBinding {
-                        binding: 0,
-                        ty: pso::DescriptorType::SampledImage,
-                        count: 1,
-                        stage_flags: pso::ShaderStageFlags::FRAGMENT,
-                        immutable_samplers: false,
-                    },
-                    pso::DescriptorSetLayoutBinding {
-                        binding: 1,
-                        ty: pso::DescriptorType::Sampler,
-                        count: 1,
-                        stage_flags: pso::ShaderStageFlags::FRAGMENT,
-                        immutable_samplers: false,
-                    },
-                    pso::DescriptorSetLayoutBinding {
-                        binding: 2,
-                        ty: pso::DescriptorType::SampledImage,
-                        count: 1,
-                        stage_flags: pso::ShaderStageFlags::FRAGMENT,
-                        immutable_samplers: false,
-                    },
-                    pso::DescriptorSetLayoutBinding {
-                        binding: 3,
-                        ty: pso::DescriptorType::Sampler,
-                        count: 1,
-                        stage_flags: pso::ShaderStageFlags::FRAGMENT,
-                        immutable_samplers: false,
-                    },
-                    pso::DescriptorSetLayoutBinding {
-                        binding: 4,
-                        ty: pso::DescriptorType::SampledImage,
-                        count: 1,
-                        stage_flags: pso::ShaderStageFlags::FRAGMENT,
-                        immutable_samplers: false,
-                    },
-                    pso::DescriptorSetLayoutBinding {
-                        binding: 5,
-                        ty: pso::DescriptorType::Sampler,
-                        count: 1,
-                        stage_flags: pso::ShaderStageFlags::FRAGMENT,
-                        immutable_samplers: false,
-                    },
-                    pso::DescriptorSetLayoutBinding {
-                        binding: 6,
-                        ty: pso::DescriptorType::SampledImage,
-                        count: 1,
-                        stage_flags: pso::ShaderStageFlags::FRAGMENT,
-                        immutable_samplers: false,
-                    },
-                    pso::DescriptorSetLayoutBinding {
-                        binding: 7,
-                        ty: pso::DescriptorType::Sampler,
-                        count: 1,
-                        stage_flags: pso::ShaderStageFlags::FRAGMENT,
-                        immutable_samplers: false,
-                    },
-                ],
-                Vec::<B::Sampler>::new(),
-            ).unwrap(),
-        ] };
+        let descriptor_set_layouts = unsafe {
+            vec![
+                device
+                    .create_descriptor_set_layout(
+                        &[
+                            pso::DescriptorSetLayoutBinding {
+                                binding: 0,
+                                ty: pso::DescriptorType::SampledImage,
+                                count: 1,
+                                stage_flags: pso::ShaderStageFlags::FRAGMENT,
+                                immutable_samplers: false,
+                            },
+                            pso::DescriptorSetLayoutBinding {
+                                binding: 1,
+                                ty: pso::DescriptorType::Sampler,
+                                count: 1,
+                                stage_flags: pso::ShaderStageFlags::FRAGMENT,
+                                immutable_samplers: false,
+                            },
+                            pso::DescriptorSetLayoutBinding {
+                                binding: 2,
+                                ty: pso::DescriptorType::SampledImage,
+                                count: 1,
+                                stage_flags: pso::ShaderStageFlags::FRAGMENT,
+                                immutable_samplers: false,
+                            },
+                            pso::DescriptorSetLayoutBinding {
+                                binding: 3,
+                                ty: pso::DescriptorType::Sampler,
+                                count: 1,
+                                stage_flags: pso::ShaderStageFlags::FRAGMENT,
+                                immutable_samplers: false,
+                            },
+                            pso::DescriptorSetLayoutBinding {
+                                binding: 4,
+                                ty: pso::DescriptorType::SampledImage,
+                                count: 1,
+                                stage_flags: pso::ShaderStageFlags::FRAGMENT,
+                                immutable_samplers: false,
+                            },
+                            pso::DescriptorSetLayoutBinding {
+                                binding: 5,
+                                ty: pso::DescriptorType::Sampler,
+                                count: 1,
+                                stage_flags: pso::ShaderStageFlags::FRAGMENT,
+                                immutable_samplers: false,
+                            },
+                            pso::DescriptorSetLayoutBinding {
+                                binding: 6,
+                                ty: pso::DescriptorType::SampledImage,
+                                count: 1,
+                                stage_flags: pso::ShaderStageFlags::FRAGMENT,
+                                immutable_samplers: false,
+                            },
+                            pso::DescriptorSetLayoutBinding {
+                                binding: 7,
+                                ty: pso::DescriptorType::Sampler,
+                                count: 1,
+                                stage_flags: pso::ShaderStageFlags::FRAGMENT,
+                                immutable_samplers: false,
+                            },
+                        ],
+                        Vec::<B::Sampler>::new(),
+                    )
+                    .unwrap(),
+            ]
+        };
         let mut descriptor_pool = unsafe {
-            device.create_descriptor_pool(
-                1,
-                &[
-                    pso::DescriptorRangeDesc {
-                        ty: pso::DescriptorType::SampledImage,
-                        count: 4,
-                    },
-                    pso::DescriptorRangeDesc {
-                        ty: pso::DescriptorType::Sampler,
-                        count: 4,
-                    },
-                ],
-                pso::DescriptorPoolCreateFlags::empty(),
-            ).unwrap()
+            device
+                .create_descriptor_pool(
+                    1,
+                    &[
+                        pso::DescriptorRangeDesc {
+                            ty: pso::DescriptorType::SampledImage,
+                            count: 4,
+                        },
+                        pso::DescriptorRangeDesc {
+                            ty: pso::DescriptorType::Sampler,
+                            count: 4,
+                        },
+                    ],
+                    pso::DescriptorPoolCreateFlags::empty(),
+                )
+                .unwrap()
         };
 
         let descriptor_set = unsafe {
-            descriptor_pool.allocate_set(&descriptor_set_layouts[0]).unwrap()
+            descriptor_pool
+                .allocate_set(&descriptor_set_layouts[0])
+                .unwrap()
         };
 
         unsafe {
@@ -723,9 +770,7 @@ impl <B: Backend> Renderer<B> {
                     set: &descriptor_set,
                     binding: 1,
                     array_offset: 0,
-                    descriptors: Some(pso::Descriptor::Sampler(
-                        &*texture_colour_map.sampler,
-                    )),
+                    descriptors: Some(pso::Descriptor::Sampler(&*texture_colour_map.sampler)),
                 },
                 pso::DescriptorSetWrite {
                     set: &descriptor_set,
@@ -740,9 +785,7 @@ impl <B: Backend> Renderer<B> {
                     set: &descriptor_set,
                     binding: 3,
                     array_offset: 0,
-                    descriptors: Some(pso::Descriptor::Sampler(
-                        &*texture_palette_map.sampler,
-                    )),
+                    descriptors: Some(pso::Descriptor::Sampler(&*texture_palette_map.sampler)),
                 },
                 pso::DescriptorSetWrite {
                     set: &descriptor_set,
@@ -757,9 +800,7 @@ impl <B: Backend> Renderer<B> {
                     set: &descriptor_set,
                     binding: 5,
                     array_offset: 0,
-                    descriptors: Some(pso::Descriptor::Sampler(
-                        &*level.texture_light.sampler,
-                    )),
+                    descriptors: Some(pso::Descriptor::Sampler(&*level.texture_light.sampler)),
                 },
                 pso::DescriptorSetWrite {
                     set: &descriptor_set,
@@ -774,21 +815,20 @@ impl <B: Backend> Renderer<B> {
                     set: &descriptor_set,
                     binding: 7,
                     array_offset: 0,
-                    descriptors: Some(pso::Descriptor::Sampler(
-                        &*level.texture.sampler,
-                    )),
+                    descriptors: Some(pso::Descriptor::Sampler(&*level.texture.sampler)),
                 },
             ])
         }
 
         let pipeline_layout = unsafe {
-            device.create_pipeline_layout(
-                &descriptor_set_layouts,
-                &[
-                    (pso::ShaderStageFlags::VERTEX, 0..4*4),
-                    (pso::ShaderStageFlags::FRAGMENT, 4*4..4*4+4),
-                ],
-            )
+            device
+                .create_pipeline_layout(
+                    &descriptor_set_layouts,
+                    &[
+                        (pso::ShaderStageFlags::VERTEX, 0..4 * 4),
+                        (pso::ShaderStageFlags::FRAGMENT, 4 * 4..4 * 4 + 4),
+                    ],
+                )
                 .unwrap()
         };
 
@@ -812,10 +852,7 @@ impl <B: Backend> Renderer<B> {
                 parent: pso::BasePipeline::None,
             };
 
-            unsafe {
-                device.create_graphics_pipeline(&desc, None)
-                    .unwrap()
-            }
+            unsafe { device.create_graphics_pipeline(&desc, None).unwrap() }
         };
 
         let depth_pipeline = {
@@ -838,10 +875,7 @@ impl <B: Backend> Renderer<B> {
                 parent: pso::BasePipeline::None,
             };
 
-            unsafe {
-                device.create_graphics_pipeline(&desc, None)
-                    .unwrap()
-            }
+            unsafe { device.create_graphics_pipeline(&desc, None).unwrap() }
         };
 
         let sky_pipeline = {
@@ -864,10 +898,7 @@ impl <B: Backend> Renderer<B> {
                 parent: pso::BasePipeline::None,
             };
 
-            unsafe {
-                device.create_graphics_pipeline(&desc, None)
-                    .unwrap()
-            }
+            unsafe { device.create_graphics_pipeline(&desc, None).unwrap() }
         };
 
         unsafe {
@@ -936,13 +967,14 @@ impl <B: Backend> Renderer<B> {
         surface: &mut B::Surface,
         render_pass: &B::RenderPass,
         previous: Option<B::Swapchain>,
-        width: u32, height: u32,
+        width: u32,
+        height: u32,
     ) -> (
         B::Swapchain,
         Vec<B::Framebuffer>,
         Vec<(B::Image, B::ImageView)>,
         Vec<DepthImage<B>>,
-    ){
+    ) {
         let (caps, formats, present_modes) = surface.compatibility(&mut adapter.physical_device);
         println!("New swap chain: {:?}", present_modes);
         let format = formats.map_or(format::Format::Rgba8Srgb, |formats| {
@@ -953,15 +985,13 @@ impl <B: Backend> Renderer<B> {
                 .unwrap_or(formats[0])
         });
 
-        let mut swap_config = SwapchainConfig::from_caps(&caps, format, Extent2D {
-            width,
-            height,
-        });
+        let mut swap_config = SwapchainConfig::from_caps(&caps, format, Extent2D { width, height });
         // swap_config.present_mode = hal::PresentMode::Immediate;
         let extent = swap_config.extent.to_extent();
 
-        let (swap_chain, images) = unsafe { device.create_swapchain(surface, swap_config, previous) }
-            .expect("Can't create swapchain");
+        let (swap_chain, images) =
+            unsafe { device.create_swapchain(surface, swap_config, previous) }
+                .expect("Can't create swapchain");
 
         let (frame_images, depth_images, framebuffers) = {
             let pairs = images
@@ -986,7 +1016,7 @@ impl <B: Backend> Renderer<B> {
             let depth_images = pairs
                 .iter()
                 .map(|_| unsafe { DepthImage::new(device, allocator, width, height) })
-                .collect::<Vec<_>>();;
+                .collect::<Vec<_>>();
             let fbos = pairs
                 .iter()
                 .zip(&depth_images)
@@ -1001,10 +1031,7 @@ impl <B: Backend> Renderer<B> {
         (swap_chain, framebuffers, frame_images, depth_images)
     }
 
-    pub fn draw(&mut self,
-        delta: f32,
-        display_size: (u32, u32),
-    ) {
+    pub fn draw(&mut self, delta: f32, display_size: (u32, u32)) {
         let gfx = &mut *self.gfx;
         if self.display_size != display_size || self.recreate_swapchain {
             self.recreate_swapchain = false;
@@ -1023,9 +1050,14 @@ impl <B: Backend> Renderer<B> {
                 }
             }
             let (swap_chain, framebuffers, frame_images, depth_images) = Self::make_swapchain(
-                &mut self.adapter, &self.device, &mut gfx.allocator, &mut self.surface, &gfx.render_pass,
+                &mut self.adapter,
+                &self.device,
+                &mut gfx.allocator,
+                &mut self.surface,
+                &gfx.render_pass,
                 gfx.swap_chain.take(),
-                display_size.0, display_size.1
+                display_size.0,
+                display_size.1,
             );
 
             gfx.swap_chain = Some(swap_chain);
@@ -1080,17 +1112,26 @@ impl <B: Backend> Renderer<B> {
                 aspect: self.display_size.0 as f32 / self.display_size.1 as f32,
                 near: 0.1,
                 far: 10_000.0,
-            }.into();
-            let u_matrix =
-                cgmath::Matrix4::from_nonuniform_scale(1.0, -1.0, 1.0)
-                * cgmath::Matrix4::from_angle_x(self.camera.rot_x + cgmath::Rad(::std::f32::consts::PI / 2.0))
+            }
+            .into();
+            let u_matrix = cgmath::Matrix4::from_nonuniform_scale(1.0, -1.0, 1.0)
+                * cgmath::Matrix4::from_angle_x(
+                    self.camera.rot_x + cgmath::Rad(::std::f32::consts::PI / 2.0),
+                )
                 * cgmath::Matrix4::from_angle_z(self.camera.rot_y)
-                * cgmath::Matrix4::from_translation(
-                    cgmath::Vector3::new(-self.camera.x, -self.camera.y, -self.camera.z)
-                );
+                * cgmath::Matrix4::from_translation(cgmath::Vector3::new(
+                    -self.camera.x,
+                    -self.camera.y,
+                    -self.camera.z,
+                ));
             let matrix: [[f32; 4]; 4] = (p_matrix * u_matrix).into();
 
-            cmd_buffer.push_graphics_constants(&gfx.pipeline_layout, pso::ShaderStageFlags::VERTEX, 0, hal::memory::cast_slice(&[matrix]));
+            cmd_buffer.push_graphics_constants(
+                &gfx.pipeline_layout,
+                pso::ShaderStageFlags::VERTEX,
+                0,
+                hal::memory::cast_slice(&[matrix]),
+            );
 
             {
                 let mut encoder = cmd_buffer.begin_render_pass_inline(
@@ -1098,9 +1139,9 @@ impl <B: Backend> Renderer<B> {
                     &gfx.framebuffers[swap_image],
                     viewport.rect,
                     &[
-                        command::ClearValue::Color(command::ClearColor::Float(
-                            [0.0, 0.0, 0.0, 1.0]
-                        )),
+                        command::ClearValue::Color(command::ClearColor::Float([
+                            0.0, 0.0, 0.0, 1.0,
+                        ])),
                         command::ClearValue::DepthStencil(command::ClearDepthStencil(1.0, 0)),
                     ],
                 );
@@ -1112,15 +1153,17 @@ impl <B: Backend> Renderer<B> {
                     &[],
                 );
 
-                self.level.draw(
-                    delta,
-                    &self.device,
-                    &gfx.pipeline_layout,
-                    &gfx.pipeline,
-                    &gfx.depth_pipeline,
-                    &gfx.sky_pipeline,
-                    &mut encoder,
-                ).unwrap();
+                self.level
+                    .draw(
+                        delta,
+                        &self.device,
+                        &gfx.pipeline_layout,
+                        &gfx.pipeline,
+                        &gfx.depth_pipeline,
+                        &gfx.sky_pipeline,
+                        &mut encoder,
+                    )
+                    .unwrap();
             }
 
             cmd_buffer.finish();
@@ -1133,7 +1176,8 @@ impl <B: Backend> Renderer<B> {
                 )),
                 signal_semaphores: Some(&gfx.submission_complete_semaphores[frame_idx]),
             };
-            self.queue_group.queues[0].submit(submission, Some(&gfx.submission_complete_fences[frame_idx]));
+            self.queue_group.queues[0]
+                .submit(submission, Some(&gfx.submission_complete_fences[frame_idx]));
 
             if let Err(_) = swap_chain.present(
                 &mut self.queue_group.queues[0],
@@ -1147,11 +1191,7 @@ impl <B: Backend> Renderer<B> {
         self.frame = self.frame.wrapping_add(1);
     }
 
-    pub fn change_level(
-        &mut self,
-        level: bsp::BspFile,
-    ) -> error::Result<()>
-    {
+    pub fn change_level(&mut self, level: bsp::BspFile) -> error::Result<()> {
         use std::ptr;
         unsafe {
             let gfx = &mut *self.gfx;
@@ -1161,10 +1201,11 @@ impl <B: Backend> Renderer<B> {
             let frame_idx = self.frame as usize % gfx.submission_complete_fences.len();
             let level = qmap::QMap::new(
                 level,
-                &mut self.adapter, &self.device,
+                &mut self.adapter,
+                &self.device,
                 &mut self.queue_group.queues[0],
                 &mut gfx.cmd_pools[frame_idx],
-                &mut gfx.allocator
+                &mut gfx.allocator,
             )?;
 
             self.device.write_descriptor_sets(vec![
@@ -1181,9 +1222,7 @@ impl <B: Backend> Renderer<B> {
                     set: &gfx.descriptor_set,
                     binding: 5,
                     array_offset: 0,
-                    descriptors: Some(pso::Descriptor::Sampler(
-                        &*level.texture_light.sampler,
-                    )),
+                    descriptors: Some(pso::Descriptor::Sampler(&*level.texture_light.sampler)),
                 },
                 pso::DescriptorSetWrite {
                     set: &gfx.descriptor_set,
@@ -1198,9 +1237,7 @@ impl <B: Backend> Renderer<B> {
                     set: &gfx.descriptor_set,
                     binding: 7,
                     array_offset: 0,
-                    descriptors: Some(pso::Descriptor::Sampler(
-                        &*level.texture.sampler,
-                    )),
+                    descriptors: Some(pso::Descriptor::Sampler(&*level.texture.sampler)),
                 },
             ]);
 
@@ -1211,7 +1248,7 @@ impl <B: Backend> Renderer<B> {
     }
 }
 
-impl <B: Backend> Drop for Renderer<B> {
+impl<B: Backend> Drop for Renderer<B> {
     fn drop(&mut self) {
         use std::ptr;
         self.device.wait_idle().unwrap();
@@ -1220,8 +1257,10 @@ impl <B: Backend> Drop for Renderer<B> {
             let level = ManuallyDrop::into_inner(ptr::read(&mut self.level));
             level.destroy(&self.device, &mut gfx.allocator);
 
-            gfx.texture_colour_map.destroy(&self.device, &mut gfx.allocator);
-            gfx.texture_palette_map.destroy(&self.device, &mut gfx.allocator);
+            gfx.texture_colour_map
+                .destroy(&self.device, &mut gfx.allocator);
+            gfx.texture_palette_map
+                .destroy(&self.device, &mut gfx.allocator);
 
             self.device.destroy_pipeline_layout(gfx.pipeline_layout);
             self.device.destroy_graphics_pipeline(gfx.pipeline);
